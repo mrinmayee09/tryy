@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nearby Places</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        html, body, #map {
+            height: 100%;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        var map = L.map('map').setView([0, 0], 13);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                var lat = position.coords.latitude;
+                var lon = position.coords.longitude;
+                map.setView([lat, lon], 15);
+                L.marker([lat, lon]).addTo(map).bindPopup("Your Location").openPopup();
+
+                var hospitalIcon = L.icon({
+                    iconUrl: 'hospital.png', // Replace with your hospital icon image path
+                    iconSize: [30, 36],
+                    iconAnchor: [16, 32],
+                    popupAnchor: [0, -32]
+                });
+
+                var pharmacyIcon = L.icon({
+                    iconUrl: 'pharmacy.png', // Replace with your pharmacy icon image path
+                    iconSize: [35, 41],
+                    iconAnchor: [16, 32],
+                    popupAnchor: [0, -32]
+                });
+                var overpassUrl = 'https://overpass-api.de/api/interpreter';
+                var overpassQuery = `
+                [out:json];
+                (
+                  node["amenity"="hospital"](around:5000,${lat},${lon});
+                  node["amenity"="pharmacy"](around:5000,${lat},${lon});
+                  way["amenity"="hospital"](around:5000,${lat},${lon});
+                  way["amenity"="pharmacy"](around:5000,${lat},${lon});
+                  relation["amenity"="hospital"](around:5000,${lat},${lon});
+                  relation["amenity"="pharmacy"](around:5000,${lat},${lon});
+                );
+                out center;
+                `;
+
+                fetch(overpassUrl, {
+                    method: 'POST',
+                    body: 'data=' + encodeURIComponent(overpassQuery)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    data.elements.forEach(element => {
+                        var icon;
+                        if (element.tags && element.tags.amenity === 'hospital') {
+                            icon = hospitalIcon;
+                        } else if (element.tags && element.tags.amenity === 'pharmacy') {
+                            icon = pharmacyIcon;
+                        }
+
+                        if (element.lat && element.lon) {
+
+                            var marker = L.marker([element.lat, element.lon], { icon: icon }).addTo(map);
+                            var popupContent = element.tags ? (element.tags.name || element.tags.amenity) : element.type;
+                            var phoneNumber = element.tags && element.tags.phone ? element.tags.phone : "Phone number not available";
+
+                            marker.bindPopup(popupContent + '<br><button onclick="window.location.href=\'tel:' + phoneNumber + '\'">Call Now</button>');
+                        } else if (element.center) {
+                            var marker = L.marker([element.center.lat, element.center.lon], { icon: icon }).addTo(map);
+                            var popupContent = element.tags ? (element.tags.name || element.tags.amenity) : element.type;
+                            var phoneNumber = element.tags && element.tags.phone ? element.tags.phone : "Phone number not available";
+                            marker.bindPopup(popupContent + '<br><button onclick="window.location.href=\'tel:' + phoneNumber + '\'">Call Now</button>');
+                        }
+                    });
+                })
+                .catch(error => console.error('Error fetching data:', error));
+
+            }, function() {
+                alert("Geolocation failed.");
+            });
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    </script>
+</body>
+</html>
